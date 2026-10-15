@@ -36,7 +36,7 @@ for module in "${MODULES[@]}"; do
     fi
     echo "[apply-patches] $module: applying ${#files[@]} patches"
     for p in "${files[@]}"; do
-      git apply --index "$p"
+      git apply "$p"
     done
   fi
 done
