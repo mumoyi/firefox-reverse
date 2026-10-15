@@ -1,0 +1,121 @@
+name: Windows PDD validation build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/windows-pdd-build]
+    paths:
+      - .github/workflows/windows-test.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-pdd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 350
+    env:
+      FIREFOX_REV: cebc55aab4d2661d1f6c2d1526362947ec4016c1
+      MOZ_SOURCE_REPO: https://github.com/${{ github.repository }}
+      MOZ_SOURCE_CHANGESET: ${{ github.sha }}
+      MOZILLABUILD: 'C:\mozilla-build\'
+      MOZBUILD_STATE_PATH: 'D:/mozbuild'
+      CHERE_INVOKING: '1'
+      MOZ_AUTOMATION: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Agent sidebar
+        working-directory: additions/browser/components/agent-sidebar
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -s content/agent-sidebar.bundle.js
+          test -s modules/PageAccessibility.sys.mjs
+      - name: Install MozillaBuild on runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Join-Path $env:RUNNER_TEMP 'MozillaBuildSetup-4.2.1.exe'
+          Invoke-WebRequest 'https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-4.2.1.exe' -OutFile $installer
+          $process = Start-Process -FilePath $installer -ArgumentList '/S','/D=C:\mozilla-build' -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw "MozillaBuild installation failed: $($process.ExitCode)" }
+          if (-not (Test-Path 'C:\mozilla-build\msys2\usr\bin\bash.exe')) { throw 'MozillaBuild shell missing' }
+          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -PropertyType DWord -Force | Out-Null
+      - name: Prepare pinned Firefox source
+        shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
+        run: |
+          set -euo pipefail
+          cd "$(cygpath -u "$GITHUB_WORKSPACE")"
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+          export UPSTREAM_REF="$FIREFOX_REV"
+          bash scripts/bootstrap.sh
+          test "$(git -C upstream rev-parse HEAD)" = "$FIREFOX_REV"
+          bash scripts/apply-patches.sh
+          node scripts/check-branding-assets.mjs upstream
+      - name: Bootstrap and build Windows x64
+        shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
+        run: |
+          set -euo pipefail
+          cd "$(cygpath -u "$GITHUB_WORKSPACE")/upstream"
+          ./mach --no-interactive bootstrap --application-choice browser
+          # Full native build; artifact mode cannot validate our C++ patches.
+          printf '%s\n' 'ac_add_options --enable-application=browser' 'ac_add_options --target=x86_64-pc-mingw32' 'ac_add_options --with-branding=browser/branding/unofficial' 'ac_add_options --disable-debug-symbols' 'ac_add_options --disable-tests' 'mk_add_options MOZ_MAKE_FLAGS=-j2' > .mozconfig
+          export MOZ_BUILD_DATE="$(date -u +%Y%m%d%H%M%S)"
+          echo "EXPECTED_BUILD_ID=$MOZ_BUILD_DATE" >> "$(cygpath -u "$GITHUB_ENV")"
+          ./mach configure
+          objdir=$(./mach environment --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["topobjdir"])')
+          objdir=$(cygpath -u "$objdir")
+          python3 ../scripts/verify-branding.py --objdir "$objdir"
+          ./mach build
+          ./mach package
+          python3 ../scripts/verify-branding.py --package "$objdir/dist/firefox"
+          mkdir -p ../candidate
+          shopt -s nullglob globstar
+          packages=("$objdir"/dist/firefox-*.zip "$objdir"/dist/install/**/firefox-*.zip)
+          test "${#packages[@]}" -eq 1
+          cp "${packages[0]}" ../candidate/firefox-reverse-v0.26.1-windows-x86_64.zip
+      - name: Verify exact Windows package
+        shell: pwsh
+        env:
+          RELEASE_TAG: v0.26.1
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = 'candidate/firefox-reverse-v0.26.1-windows-x86_64.zip'
+          $env:PACKAGE_SHA256 = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$($env:PACKAGE_SHA256)  firefox-reverse-v0.26.1-windows-x86_64.zip" | Set-Content candidate/SHA256SUMS.txt
+          @{sourceCommit=$env:SOURCE_COMMIT;upstreamCommit=$env:FIREFOX_REV;buildId=$env:EXPECTED_BUILD_ID;sha256=$env:PACKAGE_SHA256} | ConvertTo-Json | Set-Content candidate/build.json
+          python scripts/verify-windows-package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native validation failed' }
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-reverse-windows-x86_64-${{ github.sha }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-report-${{ github.sha }}
+          path: |
+            native-report/
+            upstream/obj-*/config.log
+            upstream/obj-*/mozconfig.json
+          retention-days: 14
