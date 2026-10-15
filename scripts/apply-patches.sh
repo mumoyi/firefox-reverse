@@ -45,10 +45,16 @@ done
 if [[ -d "$REPO_ROOT/additions" ]]; then
   if [[ -n "$(find "$REPO_ROOT/additions" -mindepth 1 -not -name 'README.md' -print -quit 2>/dev/null)" ]]; then
     echo "[apply-patches] copying additions/ to $UPSTREAM_DIR"
-    # 排除 agent-sidebar 的前端开发文件（Firefox 构建只需 bundle/html/css + .sys.mjs）
-    rsync -a --exclude README.md --exclude node_modules --exclude dev \
-      --exclude '*.jsx' --exclude 'package*.json' --exclude .gitignore \
-      "$REPO_ROOT/additions/" "$UPSTREAM_DIR/"
+    # 排除 agent-sidebar 的前端开发文件（Firefox 构建只需 bundle/html/css + .sys.mjs）。
+    # MozillaBuild 的 MSYS2 环境不一定带 rsync；Windows fallback 使用同样的源码树，
+    # 未参与 moz.build 的开发文件不会进入最终包。
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --exclude README.md --exclude node_modules --exclude dev \
+        --exclude '*.jsx' --exclude 'package*.json' --exclude .gitignore \
+        "$REPO_ROOT/additions/" "$UPSTREAM_DIR/"
+    else
+      cp -R "$REPO_ROOT/additions/." "$UPSTREAM_DIR/"
+    fi
   fi
 fi
 
