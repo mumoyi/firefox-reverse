@@ -78,6 +78,7 @@ jobs:
               throw "Toolchain path missing: $path"
             }
             $path | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            $env:Path = "$path;$env:Path"
           }
           clang-cl --version
           link /? | Select-Object -First 1
