@@ -82,7 +82,7 @@ jobs:
           cd "$(cygpath -u "$GITHUB_WORKSPACE")/upstream"
           ./mach --no-interactive bootstrap --application-choice browser
           # Full native build; artifact mode cannot validate our C++ patches.
-          printf '%s\n' 'ac_add_options --enable-application=browser' 'ac_add_options --target=x86_64-pc-mingw32' 'ac_add_options --with-branding=browser/branding/unofficial' 'ac_add_options --disable-debug-symbols' 'ac_add_options --disable-tests' 'mk_add_options MOZ_MAKE_FLAGS=-j2' > .mozconfig
+          printf '%s\n' 'ac_add_options --enable-application=browser' 'ac_add_options --target=x86_64-pc-windows-gnu' 'ac_add_options --with-branding=browser/branding/unofficial' 'ac_add_options --disable-debug-symbols' 'ac_add_options --disable-tests' 'mk_add_options MOZ_MAKE_FLAGS=-j2' > .mozconfig
           export MOZ_BUILD_DATE="$(date -u +%Y%m%d%H%M%S)"
           echo "EXPECTED_BUILD_ID=$MOZ_BUILD_DATE" >> "$(cygpath -u "$GITHUB_ENV")"
           ./mach configure
