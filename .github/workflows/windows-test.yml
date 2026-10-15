@@ -92,6 +92,24 @@ jobs:
           "MOZ_SDK_BIN=$($sdkbin.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           clang-cl --version
           link /? | Select-Object -First 1
+      - name: Prepare Windows App SDK runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'windows-app-sdk'
+          $nupkg = Join-Path $env:RUNNER_TEMP 'windows-app-sdk-runtime.nupkg'
+          $expanded = Join-Path $env:RUNNER_TEMP 'windows-app-sdk-nupkg'
+          $runtime = Join-Path $root 'runtime'
+          $msixZip = Join-Path $root 'runtime.zip'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Invoke-WebRequest 'https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.runtime/1.8.260921001/microsoft.windowsappsdk.runtime.1.8.260921001.nupkg' -OutFile $nupkg
+          Expand-Archive -LiteralPath $nupkg -DestinationPath $expanded -Force
+          $msix = Join-Path $expanded 'tools\MSIX\win10-x64\Microsoft.WindowsAppRuntime.1.8.msix'
+          if (-not (Test-Path $msix)) { throw "Windows App SDK MSIX missing: $msix" }
+          Copy-Item $msix $msixZip -Force
+          Expand-Archive -LiteralPath $msixZip -DestinationPath $runtime -Force
+          if (-not (Get-ChildItem $runtime -Recurse -File | Select-Object -First 1)) { throw 'Windows App SDK runtime is empty' }
+          "MOZ_WINDOWS_APP_SDK_DIR=$runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
