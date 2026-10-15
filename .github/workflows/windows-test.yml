@@ -110,6 +110,20 @@ jobs:
           Expand-Archive -LiteralPath $msixZip -DestinationPath $runtime -Force
           if (-not (Get-ChildItem $runtime -Recurse -File | Select-Object -First 1)) { throw 'Windows App SDK runtime is empty' }
           "MOZ_WINDOWS_APP_SDK_DIR=$runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Prepare winchecksec
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'winchecksec'
+          $zip = Join-Path $env:RUNNER_TEMP 'winchecksec.zip'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Invoke-WebRequest 'https://github.com/trailofbits/winchecksec/releases/download/v3.1.0/windows.x64.Release.zip' -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $root -Force
+          $exe = Get-ChildItem $root -Recurse -Filter 'winchecksec.exe' -File | Select-Object -First 1
+          if (-not $exe) { throw 'winchecksec.exe missing from release archive' }
+          $exe.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "WINCHECKSEC_BIN=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $exe.FullName --help | Select-Object -First 1
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
@@ -133,6 +147,7 @@ jobs:
           export PATH="$(cygpath -u "$MOZ_VC_BIN"):$PATH"
           export PATH="$(cygpath -u "$MOZ_SDK_BIN"):$PATH"
           export PATH="$(cygpath -u "$MOZ_NASM_BIN"):$PATH"
+          export PATH="$(cygpath -u "$WINCHECKSEC_BIN"):$PATH"
           export CC=clang-cl
           export CXX=clang-cl
           set +e
