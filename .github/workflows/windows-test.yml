@@ -61,6 +61,22 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "MozillaBuild installation failed: $($process.ExitCode)" }
           if (-not (Test-Path 'C:\mozilla-build\msys2\usr\bin\bash.exe')) { throw 'MozillaBuild shell missing' }
           New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -PropertyType DWord -Force | Out-Null
+      - name: Add Windows native toolchain to PATH
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual Studio C++ tools are not installed on the runner' }
+          $vcbin = Get-ChildItem (Join-Path $vs 'VC\Tools\MSVC\*\bin\Hostx64\x64') -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+          $sdk = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.Windows10SDK.20348 -property installationPath
+          $sdkbin = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64' -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+          foreach ($path in @('C:\Program Files\LLVM\bin', $vcbin.FullName, $sdkbin.FullName)) {
+            if (-not (Test-Path $path)) { throw "Toolchain path missing: $path" }
+            $path | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          }
+          clang-cl --version
+          link /? | Select-Object -First 1
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
