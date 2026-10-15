@@ -69,10 +69,14 @@ jobs:
           $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vs) { throw 'Visual Studio C++ tools are not installed on the runner' }
           $vcbin = Get-ChildItem (Join-Path $vs 'VC\Tools\MSVC\*\bin\Hostx64\x64') -Directory | Sort-Object FullName -Descending | Select-Object -First 1
-          $sdk = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.Windows10SDK.20348 -property installationPath
+          $llvmCandidates = @((Join-Path $vs 'VC\Tools\Llvm\x64\bin'), 'C:\Program Files\LLVM\bin')
+          $llvm = $llvmCandidates | Where-Object { Test-Path (Join-Path $_ 'clang-cl.exe') } | Select-Object -First 1
           $sdkbin = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64' -Directory | Sort-Object FullName -Descending | Select-Object -First 1
-          foreach ($path in @('C:\Program Files\LLVM\bin', $vcbin.FullName, $sdkbin.FullName)) {
-            if (-not (Test-Path $path)) { throw "Toolchain path missing: $path" }
+          foreach ($path in @($llvm, $vcbin.FullName, $sdkbin.FullName)) {
+            if (-not $path -or -not (Test-Path $path)) {
+              Write-Output "::error title=Toolchain path missing::$path"
+              throw "Toolchain path missing: $path"
+            }
             $path | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           }
           clang-cl --version
