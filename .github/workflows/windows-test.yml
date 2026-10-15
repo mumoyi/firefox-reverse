@@ -80,6 +80,9 @@ jobs:
             $path | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
             $env:Path = "$path;$env:Path"
           }
+          "MOZ_LLVM_BIN=$llvm" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MOZ_VC_BIN=$($vcbin.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MOZ_SDK_BIN=$($sdkbin.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           clang-cl --version
           link /? | Select-Object -First 1
       - name: Prepare pinned Firefox source
@@ -101,6 +104,11 @@ jobs:
         run: |
           set -euo pipefail
           cd "$(cygpath -u "$GITHUB_WORKSPACE")/upstream"
+          export PATH="$(cygpath -u "$MOZ_LLVM_BIN"):$PATH"
+          export PATH="$(cygpath -u "$MOZ_VC_BIN"):$PATH"
+          export PATH="$(cygpath -u "$MOZ_SDK_BIN"):$PATH"
+          export CC=clang-cl
+          export CXX=clang-cl
           set +e
           ./mach --no-interactive bootstrap --application-choice browser 2>&1 | tee bootstrap.log
           rc=${PIPESTATUS[0]}
