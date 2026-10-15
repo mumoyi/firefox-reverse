@@ -129,6 +129,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'winchecksec executable probe failed' }
           $report = $probe | ConvertFrom-Json
           if ($report.aslr -isnot [bool] -or $report.nx -isnot [bool]) { throw 'winchecksec JSON schema incompatible with Firefox' }
+      - name: Prepare Windows Rust crate source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'windows-rs'
+          $archive = Join-Path $root 'windows-0.62.2.crate'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Invoke-WebRequest 'https://static.crates.io/crates/windows/windows-0.62.2.crate' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580') { throw 'Windows Rust crate checksum mismatch' }
+          tar -xzf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Rust crate extraction failed' }
+          $source = Join-Path $root 'windows-0.62.2'
+          if (-not (Test-Path (Join-Path $source 'src\Windows\mod.rs'))) { throw 'Windows Rust crate source missing' }
+          "MOZ_WINDOWS_RS_DIR=$source" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
