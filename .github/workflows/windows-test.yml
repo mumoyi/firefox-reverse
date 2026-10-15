@@ -143,6 +143,21 @@ jobs:
           $source = Join-Path $root 'windows-0.62.2'
           if (-not (Test-Path (Join-Path $source 'src\Windows\mod.rs'))) { throw 'Windows Rust crate source missing' }
           "MOZ_WINDOWS_RS_DIR=$source" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Prepare Mozilla make
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'mozmake'
+          $archive = Join-Path $root 'mozmake.tar.zst'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Invoke-WebRequest 'https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/NBiu_1zzSouC1bncJ9LXoA/artifacts/public/build/mozmake.tar.zst' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '70c606452300e7a96f6c731ae7d3e8b22d66ae706c6b2b82d9f9f59ee26a2057') { throw 'Mozilla make checksum mismatch' }
+          tar -xf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw 'Mozilla make extraction failed' }
+          $bin = Join-Path $root 'mozmake'
+          & (Join-Path $bin 'mozmake.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Mozilla make executable probe failed' }
+          "MOZ_MAKE_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
@@ -167,6 +182,7 @@ jobs:
           export PATH="$(cygpath -u "$MOZ_SDK_BIN"):$PATH"
           export PATH="$(cygpath -u "$MOZ_NASM_BIN"):$PATH"
           export PATH="$(cygpath -u "$WINCHECKSEC_BIN"):$PATH"
+          export PATH="$(cygpath -u "$MOZ_MAKE_BIN"):$PATH"
           export CC=clang-cl
           export CXX=clang-cl
           set +e
