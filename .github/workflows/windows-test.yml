@@ -72,7 +72,7 @@ jobs:
           bash scripts/bootstrap.sh
           test "$(git -C upstream rev-parse HEAD)" = "$FIREFOX_REV"
           bash scripts/apply-patches.sh
-          node scripts/check-branding-assets.mjs upstream
+          cmd.exe /c node scripts/check-branding-assets.mjs upstream
       - name: Bootstrap and build Windows x64
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
