@@ -117,13 +117,18 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP 'winchecksec'
           $zip = Join-Path $env:RUNNER_TEMP 'winchecksec.zip'
           New-Item -ItemType Directory -Force -Path $root | Out-Null
-          Invoke-WebRequest 'https://github.com/trailofbits/winchecksec/releases/download/v3.1.0/windows.x64.Release.zip' -OutFile $zip
+          # Firefox autowinchecksec.py consumes the v1 boolean JSON schema.
+          Invoke-WebRequest 'https://github.com/trailofbits/winchecksec/releases/download/1.1.1/winchecksec-1.1.1.zip' -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne 'CBBB9387E278865BE5CC08C764E8C7CCCFB162299BB72169ADB00E1AA36EE1F2') { throw 'winchecksec archive checksum mismatch' }
           Expand-Archive -LiteralPath $zip -DestinationPath $root -Force
           $exe = Get-ChildItem $root -Recurse -Filter 'winchecksec.exe' -File | Select-Object -First 1
           if (-not $exe) { throw 'winchecksec.exe missing from release archive' }
           $exe.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           "WINCHECKSEC_BIN=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & $exe.FullName --help | Select-Object -First 1
+          $probe = & $exe.FullName -j $exe.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'winchecksec executable probe failed' }
+          $report = $probe | ConvertFrom-Json
+          if ($report.aslr -isnot [bool] -or $report.nx -isnot [bool]) { throw 'winchecksec JSON schema incompatible with Firefox' }
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
