@@ -43,6 +43,12 @@ jobs:
         with:
           python-version: '3.12'
       - uses: ilammy/setup-nasm@v1
+      - name: Export NASM path for MSYS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nasm = Get-Command nasm -ErrorAction Stop
+          "MOZ_NASM_BIN=$($nasm.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build Agent sidebar
         working-directory: additions/browser/components/agent-sidebar
         shell: bash
@@ -108,6 +114,7 @@ jobs:
           export PATH="$(cygpath -u "$MOZ_LLVM_BIN"):$PATH"
           export PATH="$(cygpath -u "$MOZ_VC_BIN"):$PATH"
           export PATH="$(cygpath -u "$MOZ_SDK_BIN"):$PATH"
+          export PATH="$(cygpath -u "$MOZ_NASM_BIN"):$PATH"
           export CC=clang-cl
           export CXX=clang-cl
           set +e
