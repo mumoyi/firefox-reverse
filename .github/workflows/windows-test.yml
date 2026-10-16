@@ -26,6 +26,7 @@ jobs:
       MOZBUILD_STATE_PATH: 'D:/mozbuild'
       CHERE_INVOKING: '1'
       MOZ_AUTOMATION: '1'
+      RUSTUP_TOOLCHAIN: '1.90.0-x86_64-pc-windows-msvc'
     steps:
       - uses: actions/checkout@v5
         with:
@@ -158,6 +159,20 @@ jobs:
           & (Join-Path $bin 'mozmake.exe') --version
           if ($LASTEXITCODE -ne 0) { throw 'Mozilla make executable probe failed' }
           "MOZ_MAKE_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Prepare pinned Rust and cbindgen
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Rust installation failed' }
+          $root = Join-Path $env:RUNNER_TEMP 'cbindgen'
+          cargo install cbindgen --version 0.29.1 --locked --root $root
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned cbindgen installation failed' }
+          $cbindgen = Join-Path $root 'bin\cbindgen.exe'
+          if ((& $cbindgen --version) -ne 'cbindgen 0.29.1') { throw 'Unexpected cbindgen version' }
+          "CBINDGEN=$cbindgen" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          rustc --version
+          cargo --version
       - name: Prepare pinned Firefox source
         shell: 'C:\mozilla-build\msys2\usr\bin\bash.exe --login -e -o pipefail {0}'
         run: |
